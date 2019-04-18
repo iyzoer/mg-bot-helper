@@ -1,16 +1,20 @@
 package main
 
 import (
+	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
-	"github.com/retailcrm/api-client-go/v5"
+	v5 "github.com/retailcrm/api-client-go/v5"
 )
 
 // GenerateToken function
@@ -24,8 +28,8 @@ func getAPIClient(url, key string) (*v5.Client, error, int) {
 	client := v5.New(url, key)
 
 	cr, _, e := client.APICredentials()
-	if e.RuntimeErr != nil {
-		return nil, e.RuntimeErr, http.StatusInternalServerError
+	if e != nil {
+		return nil, e, http.StatusInternalServerError
 	}
 
 	if !cr.Success {
@@ -63,4 +67,60 @@ func checkCredentials(credential []string) []string {
 	}
 
 	return rc
+}
+
+func getCommandsHash() (hash string, err error) {
+	res, err := json.Marshal(getBotCommands())
+
+	h := sha1.New()
+	h.Write(res)
+	hash = fmt.Sprintf("%x", h.Sum(nil))
+
+	return
+}
+
+func containsPiece(piece string, str string) (res bool) {
+	var err error
+	res, err = regexp.MatchString(piece, str)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+func searchSubstring(s string, t string) (res string) {
+	re := regexp.MustCompile(t)
+	strs := re.FindStringSubmatch(s)
+
+	if len(strs) > 0 {
+		res = strs[0]
+	}
+
+	return
+}
+
+func convertTime(timezone string, t time.Time) (time.Time, error) {
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		return t.In(loc), err
+	}
+
+	return t.In(loc), nil
+}
+
+func getTimezones() ([]string, error) {
+	var timezones []string
+
+	data, err := ioutil.ReadFile("./timezones.json")
+	if err != nil {
+		return timezones, err
+	}
+
+	err = json.Unmarshal(data, &timezones)
+	if err != nil {
+		return timezones, err
+	}
+
+	return timezones, nil
 }

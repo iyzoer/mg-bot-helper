@@ -43,5 +43,13 @@ not_found: Nothing is found for the specified parameters
 get_payment: Get available payment types
 get_delivery: Get available types of deliveries
 get_product: Get product by article or name
+task_command: Получить список задач или создать новую
 payment_options: "Payment options:"
 delivery_options: "Delivery options:"
+task_list: "Task list:"
+
+task_at_time: at
+task_in_time: in
+task_on_time: "on"
+times: minutes|hours|days|day
+tomorrow: tomorrow

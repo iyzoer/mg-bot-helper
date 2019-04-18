@@ -26,7 +26,8 @@ $("#but-settings").on("click", function(e) {
         {
             client_id: $(this).attr('data-clientID'),
             lang: $("select#lang").find(":selected").text(),
-            currency: $("select#currency").find(":selected").val()
+            currency: $("select#currency").find(":selected").val(),
+            timezone: $("select#timezone").find(":selected").val()
         },
         function (data) {
             M.toast({

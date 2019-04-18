@@ -27,6 +27,13 @@ func getActiveConnection() []*Connection {
 	return connection
 }
 
+func getConnections() []*Connection {
+	var connection []*Connection
+	orm.DB.Find(&connection)
+
+	return connection
+}
+
 func (c *Connection) setConnectionActivity() error {
 	return orm.DB.Model(c).Where("client_id = ?", c.ClientID).Updates(map[string]interface{}{"active": c.Active, "api_url": c.APIURL}).Error
 }

@@ -59,6 +59,7 @@ func start() {
 
 func setup() *gin.Engine {
 	loadTranslateFile()
+	updateCommands()
 	setValidation()
 
 	if config.Debug == false {

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/retailcrm/api-client-go/v5"
+	v5 "github.com/retailcrm/api-client-go/v5"
 )
 
 func connectHandler(c *gin.Context) {
@@ -35,6 +35,7 @@ func botSettingsHandler(c *gin.Context) {
 	conn := getConnection(jm["client_id"])
 	conn.Lang = jm["lang"]
 	conn.Currency = jm["currency"]
+	conn.Timezone = jm["timezone"]
 
 	err := conn.saveConnection()
 	if err != nil {
@@ -55,18 +56,25 @@ func settingsHandler(c *gin.Context) {
 		return
 	}
 
+	timezones, e := getTimezones()
+	if e != nil {
+		logger.Debugf("Getting timezones error: %s", e.Error())
+	}
+
 	res := struct {
 		Conn         *Connection
 		Locale       map[string]interface{}
 		Year         int
 		LangCode     []string
 		CurrencyCode map[string]string
+		Timezones    []string
 	}{
 		p,
 		getLocale(),
 		time.Now().Year(),
 		[]string{"en", "ru", "es"},
 		currency,
+		timezones,
 	}
 
 	c.HTML(200, "form", res)
@@ -118,14 +126,14 @@ func createHandler(c *gin.Context) {
 	conn.ClientID = GenerateToken()
 
 	data, status, e := client.IntegrationModuleEdit(getIntegrationModule(conn.ClientID))
-	if e.RuntimeErr != nil {
-		c.Error(e.RuntimeErr)
+	if e != nil {
+		c.Error(e)
 		return
 	}
 
 	if status >= http.StatusBadRequest {
 		c.JSON(http.StatusBadRequest, gin.H{"error": getLocalizedMessage("error_activity_mg")})
-		logger.Error(conn.APIURL, status, e.ApiErr, data)
+		logger.Error(conn.APIURL, status, e, data)
 		return
 	}
 

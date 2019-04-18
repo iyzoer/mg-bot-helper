@@ -47,10 +47,20 @@
                 {{$CurrencyCode := .CurrencyCode}}
                 {{$currency := .Conn.Currency}}
                     <label>Валюта</label>
-                    <select  id="currency">
+                    <select id="currency">
                     {{range $key, $value := $CurrencyCode}}
                         <option value="{{$value}}" {{if eq $value $currency}}selected{{end}}>{{$key}}</option>
                     {{end}}
+                    </select>
+                </div>
+                <div class="timezone-select">
+                    {{$Timezones := .Timezones}}
+                    {{$timezone := .Conn.Timezone}}
+                    <label>Валюта</label>
+                    <select id="timezone">
+                        {{range $value := $Timezones}}
+                            <option value="{{$value}}" {{if eq $value $timezone}}selected{{end}}>{{$value}}</option>
+                        {{end}}
                     </select>
                 </div>
             </div>

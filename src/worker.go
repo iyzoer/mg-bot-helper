@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/op/go-logging"
-	"github.com/retailcrm/api-client-go/errs"
 	v5 "github.com/retailcrm/api-client-go/v5"
 	v1 "github.com/retailcrm/mg-bot-api-client-go/v1"
 	"golang.org/x/text/language"
@@ -23,19 +21,22 @@ const (
 	CommandPayment  = "/payment"
 	CommandDelivery = "/delivery"
 	CommandProduct  = "/product"
+	CommandTask     = "/task"
 )
 
 var (
 	events         = []string{v1.WsEventMessageNew}
 	msgLen         = 2000
 	emoji          = []string{"0️⃣ ", "1️⃣ ", "2️⃣ ", "3️⃣ ", "4️⃣ ", "5️⃣ ", "6️⃣ ", "7️⃣ ", "8️⃣ ", "9️⃣ "}
-	botCommands    = []string{CommandPayment, CommandDelivery, CommandProduct}
+	botCommands    = []string{CommandPayment, CommandDelivery, CommandProduct, CommandTask}
 	botCredentials = []string{
 		"/api/integration-modules/{code}",
 		"/api/integration-modules/{code}/edit",
 		"/api/reference/payment-types",
 		"/api/reference/delivery-types",
 		"/api/store/products",
+		"/api/tasks",
+		"/api/tasks/create",
 	}
 )
 
@@ -185,7 +186,7 @@ ROOT:
 				continue
 			}
 
-			msg, msgProd, err := w.execCommand(eventData.Message.Content)
+			msg, msgProd, err := w.execCommand(eventData.Message)
 			if err != nil {
 				w.sendSentry(err)
 				msg = w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "incorrect_key"})
@@ -216,27 +217,17 @@ ROOT:
 	}
 }
 
-func checkErrors(err errs.Failure) error {
-	if err.RuntimeErr != nil {
-		return err.RuntimeErr
-	}
-
-	if err.ApiErr != "" {
-		return errors.New(err.ApiErr)
-	}
-
-	return nil
-}
-
-func parseCommand(ci string) (co string, params v5.ProductsRequest, err error) {
+func parseCommand(ci string) (co string, params string) {
 	s := strings.Split(ci, " ")
 
 	for _, cmd := range botCommands {
 		if s[0] == cmd {
 			if len(s) > 1 && cmd == CommandProduct {
-				params.Filter = v5.ProductsFilter{
-					Name: ci[len(CommandProduct)+1:],
-				}
+				params = ci[len(CommandProduct)+1:]
+			}
+
+			if len(s) > 1 && cmd == CommandTask {
+				params = ci[len(CommandTask)+1:]
 			}
 			co = s[0]
 			break
@@ -246,19 +237,16 @@ func parseCommand(ci string) (co string, params v5.ProductsRequest, err error) {
 	return
 }
 
-func (w *Worker) execCommand(message string) (resMes string, msgProd v1.MessageProduct, err error) {
+func (w *Worker) execCommand(message *v1.Message) (resMes string, msgProd v1.MessageProduct, err error) {
 	var s []string
 
-	command, params, err := parseCommand(message)
-	if err != nil {
-		return
-	}
+	command, params := parseCommand(message.Content)
 
 	switch command {
 	case CommandPayment:
-		res, _, er := w.crmClient.PaymentTypes()
-		err = checkErrors(er)
-		if err != nil {
+		res, _, e := w.crmClient.PaymentTypes()
+		if e != nil {
+			err = e
 			return
 		}
 		for _, v := range res.PaymentTypes {
@@ -270,9 +258,9 @@ func (w *Worker) execCommand(message string) (resMes string, msgProd v1.MessageP
 			resMes = fmt.Sprintf("%s\n\n", w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "payment_options"}))
 		}
 	case CommandDelivery:
-		res, _, er := w.crmClient.DeliveryTypes()
-		err = checkErrors(er)
-		if err != nil {
+		res, _, e := w.crmClient.DeliveryTypes()
+		if e != nil {
+			err = e
 			return
 		}
 		for _, v := range res.DeliveryTypes {
@@ -284,21 +272,21 @@ func (w *Worker) execCommand(message string) (resMes string, msgProd v1.MessageP
 			resMes = fmt.Sprintf("%s\n\n", w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "delivery_options"}))
 		}
 	case CommandProduct:
-		if params.Filter.Name == "" {
+		if params == "" {
 			resMes = w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "set_name_or_article"})
 			return
 		}
 
-		res, _, er := w.crmClient.Products(params)
-		err = checkErrors(er)
-		if err != nil {
+		res, _, e := w.crmClient.Products(v5.ProductsRequest{Filter: v5.ProductsFilter{Name: params}})
+		if e != nil {
+			err = e
 			return
 		}
 
 		if len(res.Products) > 0 {
 			for _, vp := range res.Products {
 				if vp.Active {
-					vo := searchOffer(vp.Offers, params.Filter.Name)
+					vo := searchOffer(vp.Offers, params)
 					msgProd = v1.MessageProduct{
 						ID:      uint64(vo.ID),
 						Name:    vo.Name,
@@ -325,13 +313,88 @@ func (w *Worker) execCommand(message string) (resMes string, msgProd v1.MessageP
 					return
 				}
 			}
+		}
+	case CommandTask:
+		if params == "" {
+			var filter string
 
+			if message.Chat.Customer.Name != "" {
+				filter = message.Chat.Customer.Name
+			} else if message.Chat.Customer.Phone != "" {
+				filter = message.Chat.Customer.Phone
+			} else if message.Chat.Customer.Email != "" {
+				filter = message.Chat.Customer.Email
+			}
+
+			tasks, _, e := w.crmClient.Tasks(v5.TasksRequest{
+				Filter: v5.TasksFilter{
+					Customer: filter,
+				},
+			})
+
+			if e != nil {
+				err = e
+				return
+			}
+
+			for _, t := range tasks.Tasks {
+				if !t.Complete {
+					s = append(s, t.Text)
+				}
+			}
+
+			if len(s) > 0 {
+				resMes = fmt.Sprintf("%s\n\n", w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "task_list"}))
+			}
+		} else {
+			var crmTask v5.Task
+			t := TaskInit(w.connection, message, w.localizer, params)
+			t.searchWhat().searchWhen()
+
+			customers, _, e := w.crmClient.Customers(v5.CustomersRequest{
+				Filter: v5.CustomersFilter{
+					MgCustomerID: strconv.FormatUint(message.Chat.Customer.ID, 10),
+				},
+			})
+
+			if e != nil {
+				err = e
+				return
+			}
+
+			if len(customers.Customers) > 0 {
+				crmTask.Customer = &customers.Customers[0]
+			}
+
+			managers, _, e := w.crmClient.Users(v5.UsersRequest{})
+			if e != nil {
+				err = e
+				return
+			}
+
+			if len(managers.Users) > 0 {
+				for _, manager := range managers.Users {
+					if message.From.ID == manager.MgUserId {
+						crmTask.PerformerID = manager.ID
+					}
+				}
+			}
+
+			crmTask.Text = t.What
+			crmTask.Datetime = t.When
+
+			_, _, e = w.crmClient.TaskCreate(crmTask)
+
+			if e != nil {
+				err = e
+				return
+			}
 		}
 	default:
 		return
 	}
 
-	if len(s) == 0 {
+	if len(s) == 0 && command != CommandTask {
 		resMes = w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "not_found"})
 		return
 	}
@@ -382,20 +445,9 @@ func searchOffer(offers []v5.Offer, filter string) (offer v5.Offer) {
 func SetBotCommand(botURL, botToken string) (code int, err error) {
 	var client = v1.New(botURL, botToken)
 
-	_, code, err = client.CommandEdit(v1.CommandEditRequest{
-		Name:        getTextCommand(CommandPayment),
-		Description: getLocalizedMessage("get_payment"),
-	})
-
-	_, code, err = client.CommandEdit(v1.CommandEditRequest{
-		Name:        getTextCommand(CommandDelivery),
-		Description: getLocalizedMessage("get_delivery"),
-	})
-
-	_, code, err = client.CommandEdit(v1.CommandEditRequest{
-		Name:        getTextCommand(CommandProduct),
-		Description: getLocalizedMessage("get_product"),
-	})
+	for _, command := range getBotCommands() {
+		_, code, err = client.CommandEdit(command)
+	}
 
 	return
 }
@@ -408,4 +460,56 @@ func getLang(lang string) *i18n.Localizer {
 	tag, _ := language.MatchStrings(matcher, lang)
 
 	return i18n.NewLocalizer(bundle, tag.String())
+}
+
+func getBotCommands() []v1.CommandEditRequest {
+	return []v1.CommandEditRequest{
+		{
+			Name:        getTextCommand(CommandPayment),
+			Description: getLocalizedMessage("get_payment"),
+		},
+		{
+			Name:        getTextCommand(CommandDelivery),
+			Description: getLocalizedMessage("get_delivery"),
+		},
+		{
+			Name:        getTextCommand(CommandProduct),
+			Description: getLocalizedMessage("get_product"),
+		},
+		{
+			Name:        getTextCommand(CommandTask),
+			Description: getLocalizedMessage("task_command"),
+		},
+	}
+}
+
+func updateCommands() {
+	connections := getConnections()
+
+	if len(connections) > 0 {
+		for _, conn := range connections {
+			setLocale(conn.Lang)
+			hash, err := getCommandsHash()
+			if err != nil {
+				logger.Error(err.Error())
+				continue
+			}
+
+			if conn.CommandsHash == hash {
+				continue
+			}
+
+			conn.CommandsHash = hash
+			bj, _ := json.Marshal(botCommands)
+			conn.Commands.RawMessage = bj
+			SetBotCommand(conn.MGURL, conn.MGToken)
+			err = conn.saveConnection()
+			if err != nil {
+				logger.Error(
+					"updateCommands conn.saveConnection apiURL: %s, err: %v",
+					conn.APIURL, err,
+				)
+			}
+		}
+	}
 }

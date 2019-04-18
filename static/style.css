@@ -148,7 +148,8 @@ a.btn-floating img {
 }
 
 .lang-select,
-.currency-select {
+.currency-select,
+.timezone-select {
     width: 30%;
     margin: 40px auto 0;
 }
