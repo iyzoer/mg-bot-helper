@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/retailcrm/api-client-go/errs"
+
 	"github.com/getsentry/raven-go"
 	"github.com/gorilla/websocket"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
@@ -22,6 +24,8 @@ const (
 	CommandDelivery = "/delivery"
 	CommandProduct  = "/product"
 	CommandTask     = "/task"
+
+	ForbiddenMessage = "Forbidden"
 )
 
 var (
@@ -35,6 +39,8 @@ var (
 		"/api/reference/payment-types",
 		"/api/reference/delivery-types",
 		"/api/store/products",
+		"/api/customers",
+		"/api/users",
 		"/api/tasks",
 		"/api/tasks/create",
 	}
@@ -187,9 +193,30 @@ ROOT:
 			}
 
 			msg, msgProd, err := w.execCommand(eventData.Message)
+
 			if err != nil {
 				w.sendSentry(err)
-				msg = w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "incorrect_key"})
+
+				if ForbiddenMessage == err.ApiError() {
+					cr, _, e := w.crmClient.APICredentials()
+
+					if e != nil {
+						msg = w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "incorrect_key"})
+					} else {
+						if res := checkCredentials(cr.Credentials); len(res) != 0 {
+							msg = w.localizer.MustLocalize(&i18n.LocalizeConfig{
+								MessageID: "missing_credentials",
+								TemplateData: map[string]interface{}{
+									"Credentials": strings.Join(res, ", "),
+								},
+							})
+						}
+					}
+				}
+
+				if "" == msg {
+					msg = w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "incorrect_key"})
+				}
 			}
 
 			msgSend := v1.MessageSendRequest{
@@ -237,7 +264,7 @@ func parseCommand(ci string) (co string, params string) {
 	return
 }
 
-func (w *Worker) execCommand(message *v1.Message) (resMes string, msgProd v1.MessageProduct, err error) {
+func (w *Worker) execCommand(message *v1.Message) (resMes string, msgProd v1.MessageProduct, err *errs.Failure) {
 	var s []string
 
 	command, params := parseCommand(message.Content)
@@ -348,8 +375,15 @@ func (w *Worker) execCommand(message *v1.Message) (resMes string, msgProd v1.Mes
 			}
 		} else {
 			var crmTask v5.Task
+			var emptyTime time.Time
+
 			t := TaskInit(w.connection, message, w.localizer, params)
 			t.searchWhat().searchWhen()
+
+			if emptyTime.Format("2006-01-02 15:04") == t.When || "" == t.What {
+				resMes = fmt.Sprintf("%s\n\n", w.localizer.MustLocalize(&i18n.LocalizeConfig{MessageID: "incorrect_task_command"}))
+				return
+			}
 
 			customers, _, e := w.crmClient.Customers(v5.CustomersRequest{
 				Filter: v5.CustomersFilter{
@@ -504,6 +538,7 @@ func updateCommands() {
 			conn.Commands.RawMessage = bj
 			SetBotCommand(conn.MGURL, conn.MGToken)
 			err = conn.saveConnection()
+
 			if err != nil {
 				logger.Error(
 					"updateCommands conn.saveConnection apiURL: %s, err: %v",

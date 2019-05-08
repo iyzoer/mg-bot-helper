@@ -29,8 +29,11 @@ var timesString = map[string]map[string]string{
 		"day":     "days",
 	},
 	"es": {
-		"minutes": "minutes",
-		"hours":   "hours",
+		"minutos": "minutes",
+		"hora":    "hours",
+		"horas":   "hours",
+		"dia":     "days",
+		"dias":    "days",
 	},
 }
 
@@ -57,13 +60,13 @@ var daysOfWeek = map[string]map[string]time.Weekday{
 		"Saturday":  time.Saturday,
 	},
 	"es": {
-		"Sunday":    time.Sunday,
-		"Monday":    time.Monday,
-		"Tuesday":   time.Tuesday,
-		"Wednesday": time.Wednesday,
-		"Thursday":  time.Thursday,
-		"Friday":    time.Friday,
-		"Saturday":  time.Saturday,
+		"Lunes":     time.Sunday,
+		"Martes":    time.Monday,
+		"Miércoles": time.Tuesday,
+		"Jueves":    time.Wednesday,
+		"Viernes":   time.Thursday,
+		"Sábado":    time.Friday,
+		"Domingo":   time.Saturday,
 	},
 }
 
@@ -97,18 +100,18 @@ var months = map[string]map[string]time.Month{
 		"Dec": time.December,
 	},
 	"es": {
-		"янв": time.January,
-		"фев": time.February,
-		"мар": time.March,
-		"апр": time.April,
-		"май": time.May,
-		"июн": time.June,
-		"июл": time.July,
-		"авг": time.August,
-		"сен": time.September,
-		"окт": time.October,
-		"ноя": time.November,
-		"дек": time.December,
+		"Ene":  time.January,
+		"Feb":  time.February,
+		"Mar":  time.March,
+		"Abr":  time.April,
+		"May":  time.May,
+		"Jun":  time.June,
+		"Jul":  time.July,
+		"Ago":  time.August,
+		"Sept": time.September,
+		"Oct":  time.October,
+		"Nov":  time.November,
+		"Dic":  time.December,
 	},
 }
 
@@ -149,6 +152,7 @@ func (t *Task) searchWhat() *Task {
 }
 
 func (t *Task) searchWhen() {
+	var rt time.Time
 	str := t.Command[t.Offset:]
 
 	at := fmt.Sprintf("%s %s", t.getMessage("task_at_time"), "\\d{2}:\\d{2}")
@@ -157,7 +161,6 @@ func (t *Task) searchWhen() {
 
 	tm, _ := time.Parse("2006-01-02T15:04:05Z", t.Message.Time)
 	ct, _ := convertTime(t.Connection.Timezone, tm)
-	var rt time.Time
 
 	switch true {
 	case containsPiece(at, str):

@@ -43,6 +43,14 @@ not_found: No se encontró nada con los parámetros especificados
 get_payment: Obtener tipos de pago disponibles
 get_delivery: Obtener tipos de entrega disponibles
 get_product: Recibir los productos por el artículo o el nombre
-task_command: Получить список задач или создать новую
+task_command: Obtenga una lista de tareas o cree una nueva
 payment_options: "Opciones de pago:"
 delivery_options: "Opciones de entrega:"
+task_list: "Lista de tareas:"
+incorrect_task_command: "https://help.retailcrm.es/Users/MgBotInfo"
+
+task_at_time: a la
+task_in_time: a las
+task_on_time: después de
+times: minutos|hora|horas|dia|dias
+tomorrow: mañana

@@ -35,7 +35,7 @@ missing_credentials: "Required methods: {{.Credentials}}"
 error_activity_mg: Check if the integration with retailCRM Chat is enabled in CRM settings
 
 crm_link: "<a href='//www.retailcrm.pro' title='retailCRM'>retailCRM</a>"
-doc_link: "<a href='//www.retailcrm.pro/docs' target='_blank'>documentation</a>"
+doc_link: "<a href='https://help.retailcrm.pro/' target='_blank'>documentation</a>"
 
 set_name_or_article: Enter product name or article number
 product_response: "Name: {{.Name}}\nStocks: {{.Quantity}} pcs\nPrice: {{.Price}} {{.Currency}}\nImage: {{.ImageURL}}"
@@ -47,6 +47,7 @@ task_command: Получить список задач или создать н�
 payment_options: "Payment options:"
 delivery_options: "Delivery options:"
 task_list: "Task list:"
+incorrect_task_command: "Could not process command. You can learn more about this command - https://help.retailcrm.pro/Users/MgBotInfo"
 
 task_at_time: at
 task_in_time: in
